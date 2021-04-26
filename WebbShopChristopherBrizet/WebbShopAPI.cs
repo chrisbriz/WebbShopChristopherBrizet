@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq;
 using WebbShopChristopherBrizet.Models;
+using WebbShopChristopherBrizet.DataBase;
 
-namespace WebbShopChristopherBrizet.DataBase
+namespace WebbShopChristopherBrizet
 {
     public class WebbShopAPI
     {
@@ -39,14 +40,11 @@ namespace WebbShopChristopherBrizet.DataBase
         /// <param name="userName">string</param>
         /// <param name="password">string</param>
         /// <returns></returns>
-        public static int Login(string userName, string password)
+        public static User Login(string userName, string password)
         {
-
+            var user = context.Users.FirstOrDefault(u => u.Name == userName && u.Password == password);
             try
             {
-
-                var user = context.Users.FirstOrDefault(u => u.Name == userName && u.Password == password);
-
                 if (user != null)
                 {
                     user.LastLogin = DateTime.Now;
@@ -54,14 +52,11 @@ namespace WebbShopChristopherBrizet.DataBase
                     user.SessionTimer = DateTime.Now;
                     context.SaveChanges();
                 }
-                return user.Id;
-
+                return user;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine(ex.Message);
-                Console.ReadLine();
-                return 0;
+                return new User();
             }
         }
 
@@ -116,9 +111,9 @@ namespace WebbShopChristopherBrizet.DataBase
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine(ex.Message);
+                Console.WriteLine("Something went wrong");
             }
 
         }
@@ -129,7 +124,7 @@ namespace WebbShopChristopherBrizet.DataBase
         /// <param name="userName"></param>
         /// <param name="password"></param>
         /// <param name="passwordVerify"></param>
-        public static void Register(string userName, string password, string passwordVerify)
+        public static bool Register(string userName, string password, string passwordVerify)
         {
             try
             {
@@ -137,7 +132,7 @@ namespace WebbShopChristopherBrizet.DataBase
 
                 if (password != passwordVerify)
                 {
-                    return;
+                    throw new Exception();
                 }
 
                 user.Name = userName;
@@ -148,10 +143,14 @@ namespace WebbShopChristopherBrizet.DataBase
                 user.SessionTimer = DateTime.Now;
                 context.Add(user);
                 context.SaveChanges();
+                Console.WriteLine("Registration Complete!");
+                Console.ReadLine();
+                return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine(ex.Message);
+                Console.WriteLine("Password confirmation incorrect");
+                return false;
             }
 
         }
@@ -231,13 +230,13 @@ namespace WebbShopChristopherBrizet.DataBase
         {
             try
             {
-                var category = GetAllCategories().FirstOrDefault(c => c.Name == keyword);
+                var category = GetAllCategories().FirstOrDefault(c => c.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
                 if (category == null)
                 {
                     category = new BookCategory();
                     category.Id = 0;
                 }
-                var books = GetAllBooks().Where(b => b.Title.Contains(keyword) || b.Author.Contains(keyword) || b.CategoryId == category.Id).ToList();
+                var books = GetAllBooks().Where(b => b.Title.Contains(keyword, StringComparison.OrdinalIgnoreCase) || b.Author.Contains(keyword, StringComparison.OrdinalIgnoreCase) || b.CategoryId == category.Id).ToList();
 
                 return books;
             }
@@ -348,6 +347,18 @@ namespace WebbShopChristopherBrizet.DataBase
             }
 
         }
+        public static List<Book> GetAuthor(string keyword)
+        {
+            try
+            {
+                var selection = GetAllBooks().Where(b => b.Author.Contains(keyword)).ToList(); ;
+                return selection;
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
 
         #endregion
 
@@ -362,29 +373,36 @@ namespace WebbShopChristopherBrizet.DataBase
         /// <param name="author"></param>
         /// <param name="price"></param>
         /// <param name="amount"></param>
-        public static void AddBook(int adminId, int bookId, string title, string author, int price, int amount)
+        public static void AddBook(int adminId, string title, string author, int price, int amount)
         {
 
             if (IsAdmin(adminId))
             {
                 try
                 {
-                    var book = GetBookById(bookId);
-                    if (book != null)
+                    var bookExist = GetBooksByKeyword(title).FirstOrDefault();
+                    if (bookExist != null)
                     {
-                        book.Amount += amount;
+                        bookExist.Amount += amount;
                         return;
                     }
-                    book.Title = title;
-                    book.Author = author;
-                    book.Price = price;
-                    book.Amount += amount;
-                    context.Add(book);
-                    context.SaveChanges();
+                    else
+                    {
+                        var book = new Book();
+                        book.Title = title;
+                        book.Author = author;
+                        book.Price = price;
+                        book.Amount += amount;
+                        context.Add(book);
+                        context.SaveChanges();
+                        Console.WriteLine("Book added");
+                    }
+
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.Message);
+                    Console.WriteLine("Something went wrong");
                     throw;
                 }
             }
@@ -472,17 +490,18 @@ namespace WebbShopChristopherBrizet.DataBase
         /// <param name="title"></param>
         /// <param name="author"></param>
         /// <param name="price"></param>
-        public static void UpdateBook(int adminId, int bookId, string title, string author, int price)
+        public static void UpdateBook(int adminId, string title, string author, int price)
         {
             try
             {
                 if (IsAdmin(adminId))
                 {
-                    var book = GetBookById(bookId);
+                    var book = GetBooksByKeyword(title).FirstOrDefault();
                     book.Title = title;
                     book.Author = author;
                     book.Price = price;
                     context.SaveChanges();
+                    Console.WriteLine("Book updated");
                 }
             }
             catch (Exception ex)
@@ -513,6 +532,7 @@ namespace WebbShopChristopherBrizet.DataBase
                     }
                     book.Amount -= 1;
                     context.SaveChanges();
+                    Console.WriteLine("Book removed");
                 }
             }
             catch (Exception ex)
@@ -567,8 +587,8 @@ namespace WebbShopChristopherBrizet.DataBase
                     var book = GetBookById(bookId);
                     book.CategoryId = categoryId;
                     context.SaveChanges();
+                    Console.WriteLine("Book added");
                 }
-
             }
             catch (Exception ex)
             {
